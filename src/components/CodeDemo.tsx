@@ -2,24 +2,19 @@ import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { PlayCircle, CheckCircle2, Copy, Trash2 } from "lucide-react";
+import { PlayCircle, CheckCircle2, Copy, Trash2, Loader2 } from "lucide-react";
 import { toast } from "sonner";
+import { supabase } from "@/integrations/supabase/client";
 
 const codeExamples = {
-  javascript: {
-    original: `function calculateTotal(items) {
+  javascript: `function calculateTotal(items) {
   var total = 0;
   for (var i = 0; i < items.length; i++) {
     total = total + items[i].price;
   }
   return total;
 }`,
-    optimized: `const calculateTotal = (items) => {
-  return items.reduce((sum, item) => sum + item.price, 0);
-};`
-  },
-  html: {
-    original: `<div class="container">
+  html: `<div class="container">
   <div class="header">
     <h1>Title</h1>
   </div>
@@ -30,20 +25,7 @@ const codeExamples = {
     <p>Footer</p>
   </div>
 </div>`,
-    optimized: `<div class="container">
-  <header>
-    <h1>Title</h1>
-  </header>
-  <main>
-    <p>Text here</p>
-  </main>
-  <footer>
-    <p>Footer</p>
-  </footer>
-</div>`
-  },
-  css: {
-    original: `.button {
+  css: `.button {
   background-color: blue;
   color: white;
   padding-top: 10px;
@@ -52,34 +34,67 @@ const codeExamples = {
   padding-right: 20px;
   border-radius: 5px;
 }`,
-    optimized: `.button {
-  background-color: blue;
-  color: white;
-  padding: 10px 20px;
-  border-radius: 5px;
-}`
-  },
-  python: {
-    original: `def find_max(numbers):
+  python: `def find_max(numbers):
     max_num = numbers[0]
     for i in range(len(numbers)):
         if numbers[i] > max_num:
             max_num = numbers[i]
-    return max_num`,
-    optimized: `def find_max(numbers):
-    return max(numbers)`
-  }
+    return max_num`
 };
 
-export const CodeDemo = () => {
-  const [language, setLanguage] = useState<keyof typeof codeExamples>("javascript");
-  const [code, setCode] = useState(codeExamples.javascript.original);
-  const [showOptimized, setShowOptimized] = useState(false);
+type Language = keyof typeof codeExamples;
 
-  const handleLanguageChange = (newLang: keyof typeof codeExamples) => {
+export const CodeDemo = () => {
+  const [language, setLanguage] = useState<Language>("javascript");
+  const [code, setCode] = useState(codeExamples.javascript);
+  const [optimizedCode, setOptimizedCode] = useState("");
+  const [improvements, setImprovements] = useState<string[]>([]);
+  const [showOptimized, setShowOptimized] = useState(false);
+  const [isOptimizing, setIsOptimizing] = useState(false);
+
+  const handleLanguageChange = (newLang: Language) => {
     setLanguage(newLang);
-    setCode(codeExamples[newLang].original);
+    setCode(codeExamples[newLang]);
     setShowOptimized(false);
+    setOptimizedCode("");
+    setImprovements([]);
+  };
+
+  const handleOptimize = async () => {
+    if (!code.trim()) {
+      toast.error("Please enter some code to optimize");
+      return;
+    }
+
+    setIsOptimizing(true);
+    setShowOptimized(false);
+
+    try {
+      const { data, error } = await supabase.functions.invoke('optimize-code', {
+        body: { code, language }
+      });
+
+      if (error) {
+        console.error('Function error:', error);
+        toast.error(error.message || "Failed to optimize code");
+        return;
+      }
+
+      if (data.error) {
+        toast.error(data.error);
+        return;
+      }
+
+      setOptimizedCode(data.optimizedCode);
+      setImprovements(data.improvements || []);
+      setShowOptimized(true);
+      toast.success("Code optimized successfully!");
+    } catch (error) {
+      console.error('Optimization error:', error);
+      toast.error("Failed to optimize code");
+    } finally {
+      setIsOptimizing(false);
+    }
   };
 
   const copyToClipboard = (text: string, label: string) => {
@@ -144,11 +159,21 @@ export const CodeDemo = () => {
                 </Button>
                 <Button 
                   size="sm" 
-                  onClick={() => setShowOptimized(!showOptimized)}
+                  onClick={handleOptimize}
                   className="glow"
+                  disabled={isOptimizing || !code}
                 >
-                  <PlayCircle className="w-4 h-4 mr-2" />
-                  Analyze & Optimize
+                  {isOptimizing ? (
+                    <>
+                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                      Optimizing...
+                    </>
+                  ) : (
+                    <>
+                      <PlayCircle className="w-4 h-4 mr-2" />
+                      Analyze & Optimize
+                    </>
+                  )}
                 </Button>
               </div>
             </div>
@@ -170,7 +195,7 @@ export const CodeDemo = () => {
                     <Button 
                       size="sm" 
                       variant="outline"
-                      onClick={() => copyToClipboard(codeExamples[language].optimized, "Optimized code")}
+                      onClick={() => copyToClipboard(optimizedCode, "Optimized code")}
                     >
                       <Copy className="w-4 h-4" />
                     </Button>
@@ -183,30 +208,29 @@ export const CodeDemo = () => {
               </div>
             </div>
             <div className="min-h-[300px] p-4 rounded-lg bg-background border border-border">
-              {showOptimized ? (
+              {showOptimized && optimizedCode ? (
                 <pre className="code-font text-sm text-foreground whitespace-pre-wrap">
-                  {codeExamples[language].optimized}
+                  {optimizedCode}
                 </pre>
               ) : (
                 <div className="flex items-center justify-center h-full text-muted-foreground">
-                  Click "Analyze & Optimize" to see results
+                  {isOptimizing ? "Optimizing your code..." : "Click \"Analyze & Optimize\" to see results"}
                 </div>
               )}
             </div>
           </div>
         </div>
 
-        {showOptimized && (
+        {showOptimized && improvements.length > 0 && (
           <div className="mt-6 p-6 rounded-xl bg-card border border-primary/30">
             <h4 className="font-semibold mb-3 flex items-center gap-2">
               <CheckCircle2 className="w-5 h-5 text-success" />
               Improvements Applied
             </h4>
             <ul className="space-y-2 text-muted-foreground">
-              <li>✓ Replaced var with const for better scoping</li>
-              <li>✓ Converted to arrow function for cleaner syntax</li>
-              <li>✓ Used Array.reduce() for more functional approach</li>
-              <li>✓ Reduced code complexity by 40%</li>
+              {improvements.map((improvement, index) => (
+                <li key={index}>✓ {improvement}</li>
+              ))}
             </ul>
           </div>
         )}
