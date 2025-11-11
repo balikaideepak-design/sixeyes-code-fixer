@@ -1,23 +1,86 @@
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { PlayCircle, CheckCircle2, Copy, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 
-export const CodeDemo = () => {
-  const [code, setCode] = useState(`function calculateTotal(items) {
+const codeExamples = {
+  javascript: {
+    original: `function calculateTotal(items) {
   var total = 0;
   for (var i = 0; i < items.length; i++) {
     total = total + items[i].price;
   }
   return total;
-}`);
-
-  const optimizedCode = `const calculateTotal = (items) => {
+}`,
+    optimized: `const calculateTotal = (items) => {
   return items.reduce((sum, item) => sum + item.price, 0);
-};`;
+};`
+  },
+  html: {
+    original: `<div class="container">
+  <div class="header">
+    <h1>Title</h1>
+  </div>
+  <div class="content">
+    <p>Text here</p>
+  </div>
+  <div class="footer">
+    <p>Footer</p>
+  </div>
+</div>`,
+    optimized: `<div class="container">
+  <header>
+    <h1>Title</h1>
+  </header>
+  <main>
+    <p>Text here</p>
+  </main>
+  <footer>
+    <p>Footer</p>
+  </footer>
+</div>`
+  },
+  css: {
+    original: `.button {
+  background-color: blue;
+  color: white;
+  padding-top: 10px;
+  padding-bottom: 10px;
+  padding-left: 20px;
+  padding-right: 20px;
+  border-radius: 5px;
+}`,
+    optimized: `.button {
+  background-color: blue;
+  color: white;
+  padding: 10px 20px;
+  border-radius: 5px;
+}`
+  },
+  python: {
+    original: `def find_max(numbers):
+    max_num = numbers[0]
+    for i in range(len(numbers)):
+        if numbers[i] > max_num:
+            max_num = numbers[i]
+    return max_num`,
+    optimized: `def find_max(numbers):
+    return max(numbers)`
+  }
+};
 
+export const CodeDemo = () => {
+  const [language, setLanguage] = useState<keyof typeof codeExamples>("javascript");
+  const [code, setCode] = useState(codeExamples.javascript.original);
   const [showOptimized, setShowOptimized] = useState(false);
+
+  const handleLanguageChange = (newLang: keyof typeof codeExamples) => {
+    setLanguage(newLang);
+    setCode(codeExamples[newLang].original);
+    setShowOptimized(false);
+  };
 
   const copyToClipboard = (text: string, label: string) => {
     navigator.clipboard.writeText(text);
@@ -44,8 +107,24 @@ export const CodeDemo = () => {
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           {/* Input Code */}
           <div className="space-y-4">
-            <div className="flex items-center justify-between">
+            <div className="flex items-center justify-between mb-2">
               <h3 className="text-lg font-semibold">Original Code</h3>
+              <Select value={language} onValueChange={handleLanguageChange}>
+                <SelectTrigger className="w-[140px]">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="javascript">JavaScript</SelectItem>
+                  <SelectItem value="html">HTML</SelectItem>
+                  <SelectItem value="css">CSS</SelectItem>
+                  <SelectItem value="python">Python</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="flex items-center justify-between">
+              <div className="text-sm text-muted-foreground">
+                Select a language and edit the code
+              </div>
               <div className="flex gap-2">
                 <Button 
                   size="sm" 
@@ -91,7 +170,7 @@ export const CodeDemo = () => {
                     <Button 
                       size="sm" 
                       variant="outline"
-                      onClick={() => copyToClipboard(optimizedCode, "Optimized code")}
+                      onClick={() => copyToClipboard(codeExamples[language].optimized, "Optimized code")}
                     >
                       <Copy className="w-4 h-4" />
                     </Button>
@@ -106,7 +185,7 @@ export const CodeDemo = () => {
             <div className="min-h-[300px] p-4 rounded-lg bg-background border border-border">
               {showOptimized ? (
                 <pre className="code-font text-sm text-foreground whitespace-pre-wrap">
-                  {optimizedCode}
+                  {codeExamples[language].optimized}
                 </pre>
               ) : (
                 <div className="flex items-center justify-center h-full text-muted-foreground">
