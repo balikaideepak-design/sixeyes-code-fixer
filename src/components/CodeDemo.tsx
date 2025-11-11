@@ -1,7 +1,8 @@
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
-import { PlayCircle, CheckCircle2 } from "lucide-react";
+import { PlayCircle, CheckCircle2, Copy, Trash2 } from "lucide-react";
+import { toast } from "sonner";
 
 export const CodeDemo = () => {
   const [code, setCode] = useState(`function calculateTotal(items) {
@@ -17,6 +18,16 @@ export const CodeDemo = () => {
 };`;
 
   const [showOptimized, setShowOptimized] = useState(false);
+
+  const copyToClipboard = (text: string, label: string) => {
+    navigator.clipboard.writeText(text);
+    toast.success(`${label} copied to clipboard!`);
+  };
+
+  const clearCode = () => {
+    setCode("");
+    toast.success("Original code cleared!");
+  };
 
   return (
     <section id="demo" className="py-24 px-6 bg-secondary/30 scroll-mt-20">
@@ -35,14 +46,32 @@ export const CodeDemo = () => {
           <div className="space-y-4">
             <div className="flex items-center justify-between">
               <h3 className="text-lg font-semibold">Original Code</h3>
-              <Button 
-                size="sm" 
-                onClick={() => setShowOptimized(!showOptimized)}
-                className="glow"
-              >
-                <PlayCircle className="w-4 h-4 mr-2" />
-                Analyze & Optimize
-              </Button>
+              <div className="flex gap-2">
+                <Button 
+                  size="sm" 
+                  variant="outline"
+                  onClick={() => copyToClipboard(code, "Original code")}
+                  disabled={!code}
+                >
+                  <Copy className="w-4 h-4" />
+                </Button>
+                <Button 
+                  size="sm" 
+                  variant="outline"
+                  onClick={clearCode}
+                  disabled={!code}
+                >
+                  <Trash2 className="w-4 h-4" />
+                </Button>
+                <Button 
+                  size="sm" 
+                  onClick={() => setShowOptimized(!showOptimized)}
+                  className="glow"
+                >
+                  <PlayCircle className="w-4 h-4 mr-2" />
+                  Analyze & Optimize
+                </Button>
+              </div>
             </div>
             <Textarea
               value={code}
@@ -56,12 +85,23 @@ export const CodeDemo = () => {
           <div className="space-y-4">
             <div className="flex items-center justify-between">
               <h3 className="text-lg font-semibold">Optimized Code</h3>
-              {showOptimized && (
-                <div className="flex items-center gap-2 text-success">
-                  <CheckCircle2 className="w-4 h-4" />
-                  <span className="text-sm">Optimized</span>
-                </div>
-              )}
+              <div className="flex items-center gap-2">
+                {showOptimized && (
+                  <>
+                    <Button 
+                      size="sm" 
+                      variant="outline"
+                      onClick={() => copyToClipboard(optimizedCode, "Optimized code")}
+                    >
+                      <Copy className="w-4 h-4" />
+                    </Button>
+                    <div className="flex items-center gap-2 text-success">
+                      <CheckCircle2 className="w-4 h-4" />
+                      <span className="text-sm">Optimized</span>
+                    </div>
+                  </>
+                )}
+              </div>
             </div>
             <div className="min-h-[300px] p-4 rounded-lg bg-background border border-border">
               {showOptimized ? (
