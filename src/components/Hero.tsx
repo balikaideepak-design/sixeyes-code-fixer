@@ -28,11 +28,20 @@ export const Hero = () => {
 
         {/* CTA Buttons */}
         <div className="flex flex-col sm:flex-row gap-4 justify-center mb-16">
-          <Button size="lg" className="text-lg glow group">
+          <Button 
+            size="lg" 
+            className="text-lg glow group"
+            onClick={() => document.getElementById('demo')?.scrollIntoView({ behavior: 'smooth' })}
+          >
             Get Started
             <ArrowRight className="ml-2 w-5 h-5 group-hover:translate-x-1 transition-transform" />
           </Button>
-          <Button size="lg" variant="secondary" className="text-lg">
+          <Button 
+            size="lg" 
+            variant="secondary" 
+            className="text-lg"
+            onClick={() => document.getElementById('demo')?.scrollIntoView({ behavior: 'smooth' })}
+          >
             <Code2 className="mr-2 w-5 h-5" />
             View Demo
           </Button>

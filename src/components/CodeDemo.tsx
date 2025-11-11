@@ -19,7 +19,7 @@ export const CodeDemo = () => {
   const [showOptimized, setShowOptimized] = useState(false);
 
   return (
-    <section className="py-24 px-6 bg-secondary/30">
+    <section id="demo" className="py-24 px-6 bg-secondary/30 scroll-mt-20">
       <div className="max-w-6xl mx-auto">
         <div className="text-center mb-12">
           <h2 className="text-4xl md:text-5xl font-bold mb-4">
