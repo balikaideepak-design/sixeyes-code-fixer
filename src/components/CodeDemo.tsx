@@ -593,7 +593,7 @@ export const CodeDemo = () => {
                             <h5 className="font-medium text-white text-xs mb-1.5 opacity-80">Recommended Online Platforms</h5>
                             <ul className="text-xs space-y-1 text-gray-400">
                               <li>
-                                <a href="https://replit.com" target="_blank" rel="noopener noreferrer" className="hover:text-blue-400 underline">Replit</a> (All languages)
+                                <a href="https://onecompiler.com/" target="_blank" rel="noopener noreferrer" className="hover:text-blue-400 underline">OneComplier (All languages)</a>
                               </li>
                               {(language === 'javascript' || language === 'html' || language === 'css') && (
                                 <>
