@@ -11,103 +11,148 @@ serve(async (req) => {
   }
 
   try {
-    const { code, language } = await req.json();
+    const { code, language, mode, settings, messages, userQuery } = await req.json();
     
-    if (!code || !language) {
-      return new Response(
-        JSON.stringify({ error: 'Code and language are required' }),
-        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
+    const API_KEY = Deno.env.get('LOVABLE_API_KEY');
+    if (!API_KEY) {
+      throw new Error('API Key not configured');
     }
 
-    const LOVABLE_API_KEY = Deno.env.get('LOVABLE_API_KEY');
-    if (!LOVABLE_API_KEY) {
-      console.error('LOVABLE_API_KEY is not configured');
-      return new Response(
-        JSON.stringify({ error: 'AI service not configured' }),
-        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
+    const GEMINI_URL = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${API_KEY}`;
+
+    let systemPrompt = "";
+    let contents = [];
+
+    if (mode === 'general-chat') {
+      systemPrompt = `You are 'SIX EYES', an expert coding assistant.
+      Your goal is to help users with programming questions for languages like JavaScript, HTML, CSS, Python, C++, and Java.
+      
+      - Answer questions concisely and accurately.
+      - Provide code examples where helpful.
+      - If a user asks about something non-coding related, politely steer them back to programming.
+      - Use Markdown formatting for your response.`;
+
+      if (messages && messages.length > 0) {
+        // 1. Map frontend roles to Gemini roles
+        let mappedMessages = messages.map((msg: any) => ({
+          role: msg.role === 'assistant' ? 'model' : 'user',
+          parts: [{ text: msg.content }]
+        }));
+
+        // 2. Fix: Ensure conversation starts with a USER message
+        // Remove leading model messages
+        while (mappedMessages.length > 0 && mappedMessages[0].role === 'model') {
+          mappedMessages.shift();
+        }
+
+        // 3. Fix: Ensure strict alternation (User -> Model -> User)
+        // Gemini will error if we send User -> User or Model -> Model
+        const validMessages = [];
+        if (mappedMessages.length > 0) {
+          validMessages.push(mappedMessages[0]);
+          for (let i = 1; i < mappedMessages.length; i++) {
+            if (mappedMessages[i].role !== mappedMessages[i-1].role) {
+              validMessages.push(mappedMessages[i]);
+            }
+          }
+        }
+        
+        contents = validMessages;
+      } else {
+        // Fallback if no history
+        contents = [{ role: "user", parts: [{ text: userQuery || "Hello" }] }];
+      }
+      
+      // Final check: if after filtering we have no messages, add a default one
+      if (contents.length === 0) {
+         contents = [{ role: "user", parts: [{ text: userQuery || "Hello" }] }];
+      }
+
+    } else {
+      // ... (OPTIMIZE MODE logic remains unchanged) ...
+      // Construct settings context
+      let focusInstructions = "Optimize for general best practices.";
+      if (settings) {
+        const focus = [];
+        if (settings.performance) focus.push("Performance efficiency");
+        if (settings.readability) focus.push("Code readability and clean style");
+        if (settings.security) focus.push("Security vulnerabilities");
+        if (settings.comments) focus.push("Adding detailed comments");
+        
+        if (focus.length > 0) {
+          focusInstructions = `Prioritize the following aspects: ${focus.join(", ")}.`;
+        }
+      }
+
+      systemPrompt = `You are a code optimization expert. Your task is two-fold:
+
+      STEP 1: VALIDATION (CRITICAL)
+      The user claims this code is written in "${language}".
+      Analyze the syntax. If the code is clearly NOT "${language}" (e.g., HTML tags in a Java file, Python indentation in C++, CSS rules in JavaScript), you must REJECT it.
+      
+      If rejected, return this JSON:
+      {
+        "error": "Language mismatch: The code appears to be [Detected Language] but you selected ${language}. Please select the suitable language."
+      }
+
+      STEP 2: OPTIMIZATION
+      If the code matches "${language}" or is ambiguous/snippet-like:
+      1. Optimize the code based on standard best practices.
+      2. ${focusInstructions}
+      3. Provide a list of specific improvements.
+      4. Provide a short explanation.
+
+      If accepted, return this JSON:
+      {
+        "optimizedCode": "the full optimized code string",
+        "improvements": ["improvement 1", "improvement 2"],
+        "explanation": "Summary of changes..."
+      }
+      
+      CRITICAL: Return ONLY valid raw JSON. Do not use markdown blocks like \`\`\`json. Do not include any other text.`;
+      
+      contents = [{
+        role: "user",
+        parts: [{ text: `Language: ${language}\n\nCode to optimize:\n${code}` }]
+      }];
     }
 
-    console.log(`Optimizing ${language} code...`);
-
-    const systemPrompt = `You are a code optimization expert. Analyze the provided code and return an optimized version along with a list of improvements made. 
-
-IMPORTANT: Return ONLY valid JSON in this exact format:
-{
-  "optimizedCode": "the optimized code here",
-  "improvements": [
-    "improvement 1",
-    "improvement 2",
-    "improvement 3"
-  ]
-}
-
-Focus on:
-- Modern syntax and best practices
-- Performance improvements
-- Code readability
-- Removing redundancy
-- Better structure
-
-Do not include any markdown formatting, explanations, or text outside the JSON structure.`;
-
-    const response = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
+    const response = await fetch(GEMINI_URL, {
       method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${LOVABLE_API_KEY}`,
-        'Content-Type': 'application/json',
-      },
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        model: 'google/gemini-2.5-flash',
-        messages: [
-          { role: 'system', content: systemPrompt },
-          { role: 'user', content: `Language: ${language}\n\nCode to optimize:\n${code}` }
-        ],
-      }),
+        contents: contents,
+        systemInstruction: { parts: [{ text: systemPrompt }] }
+      })
     });
 
     if (!response.ok) {
       const errorText = await response.text();
-      console.error('AI Gateway error:', response.status, errorText);
-      
-      if (response.status === 429) {
-        return new Response(
-          JSON.stringify({ error: 'Rate limit exceeded. Please try again later.' }),
-          { status: 429, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-        );
-      }
-      
-      if (response.status === 402) {
-        return new Response(
-          JSON.stringify({ error: 'AI credits exhausted. Please add credits to continue.' }),
-          { status: 402, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-        );
-      }
-
-      return new Response(
-        JSON.stringify({ error: 'Failed to optimize code' }),
-        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
+      console.error('Gemini API error:', response.status, errorText);
+      // Return a generic error to frontend but log specific one
+      throw new Error(`Gemini API Error: ${response.status}`);
     }
 
     const data = await response.json();
-    const aiResponse = data.choices[0].message.content;
-    
-    console.log('AI Response:', aiResponse);
+    let aiResponseText = data.candidates?.[0]?.content?.parts?.[0]?.text;
 
-    // Parse the JSON response
+    if (!aiResponseText) {
+      throw new Error('No response from AI');
+    }
+
+    if (mode !== 'general-chat') {
+        aiResponseText = aiResponseText.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
+    }
+
     let result;
-    try {
-      result = JSON.parse(aiResponse);
-    } catch (parseError) {
-      console.error('Failed to parse AI response:', parseError);
-      // Try to extract JSON from the response if it's wrapped in markdown
-      const jsonMatch = aiResponse.match(/\{[\s\S]*\}/);
-      if (jsonMatch) {
-        result = JSON.parse(jsonMatch[0]);
-      } else {
-        throw new Error('Invalid AI response format');
+    if (mode === 'general-chat') {
+      result = { reply: aiResponseText };
+    } else {
+      try {
+        result = JSON.parse(aiResponseText);
+      } catch (e) {
+        console.error("Failed to parse JSON:", aiResponseText);
+        result = { error: "Failed to process code. AI returned invalid format." };
       }
     }
 
@@ -117,7 +162,7 @@ Do not include any markdown formatting, explanations, or text outside the JSON s
     );
 
   } catch (error) {
-    console.error('Error in optimize-code function:', error);
+    console.error('Error in function:', error);
     return new Response(
       JSON.stringify({ error: error instanceof Error ? error.message : 'Unknown error' }),
       { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
