@@ -7,14 +7,14 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger, SheetDescription } from "@/components/ui/sheet";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { 
-  PlayCircle, CheckCircle2, Copy, Trash2, Loader2, Volume2, StopCircle, 
-  Download, FileDiff, Code2, Settings, History, Clock 
+import {
+  PlayCircle, CheckCircle2, Copy, Trash2, Loader2, Volume2, StopCircle,
+  Download, FileDiff, Code2, Settings, History, Clock, Terminal
 } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 
-type Language = "javascript" | "html" | "css" | "python" | "cpp" | "java";
+type Language = "javascript" | "html" | "css" | "python" | "c" | "java";
 
 const LOADING_STEPS = [
   "Analyzing syntax...",
@@ -30,7 +30,7 @@ const FILE_EXTENSIONS: Record<Language, string> = {
   html: "html",
   css: "css",
   python: "py",
-  cpp: "cpp",
+  c: "c",
   java: "java"
 };
 
@@ -38,7 +38,7 @@ const FILE_EXTENSIONS: Record<Language, string> = {
 const KEYWORDS = {
   javascript: /\b(const|let|var|function|return|if|else|for|while|import|from|export|default|class|extends|try|catch|async|await|new|this|typeof)\b/g,
   python: /\b(def|return|if|elif|else|for|while|import|from|as|class|try|except|finally|with|pass|lambda|global|nonlocal|True|False|None)\b/g,
-  cpp: /\b(int|float|double|char|void|bool|if|else|for|while|return|class|struct|public|private|protected|include|using|namespace|std|cout|cin|endl|template|typename)\b/g,
+  c: /\b(int|float|double|char|void|bool|if|else|for|while|return|struct|enum|union|switch|case|break|continue|default|signed|unsigned|long|short|const|static|volatile|extern|auto|register|sizeof|typedef)\b/g,
   java: /\b(public|private|protected|class|interface|void|int|double|float|boolean|String|if|else|for|while|return|new|this|super|import|package|try|catch|finally|static|final)\b/g,
   html: /(&lt;\/?[a-z0-9]+|&gt;|\/&gt;)/gi, // Basic HTML tag detection
   css: /\b(color|background|margin|padding|border|font|display|flex|grid|width|height|position|top|left|right|bottom)\b/g
@@ -46,7 +46,7 @@ const KEYWORDS = {
 
 const highlightCode = (code: string, lang: Language) => {
   if (!code) return null;
-  
+
   let escaped = code
     .replace(/&/g, "&amp;")
     .replace(/</g, "&lt;")
@@ -71,7 +71,7 @@ const generateDiff = (original: string, modified: string): DiffLine[] => {
   const oldLines = original.split('\n');
   const newLines = modified.split('\n');
   const diff: DiffLine[] = [];
-  
+
   let i = 0, j = 0;
   while (i < oldLines.length || j < newLines.length) {
     const oldLine = oldLines[i];
@@ -121,6 +121,8 @@ export const CodeDemo = () => {
   const [isSpeaking, setIsSpeaking] = useState(false);
   const [loadingStep, setLoadingStep] = useState(0);
   const [viewMode, setViewMode] = useState<'code' | 'diff'>('code');
+  const [executionResult, setExecutionResult] = useState<{ output?: string; error?: string } | null>(null);
+  const [isExecuting, setIsExecuting] = useState(false);
 
   // New State for Settings and History
   const [settings, setSettings] = useState<OptimizationSettings>({
@@ -164,7 +166,7 @@ export const CodeDemo = () => {
     if (window.speechSynthesis.onvoiceschanged !== undefined) {
       window.speechSynthesis.onvoiceschanged = loadVoices;
     }
-    
+
     return () => {
       window.speechSynthesis.cancel();
     };
@@ -191,7 +193,7 @@ export const CodeDemo = () => {
       optimizedCode: optimized,
       improvements: imp
     };
-    
+
     const newHistory = [newItem, ...history].slice(0, 10); // Keep last 10
     setHistory(newHistory);
     localStorage.setItem('optimizationHistory', JSON.stringify(newHistory));
@@ -235,16 +237,37 @@ export const CodeDemo = () => {
       setOptimizedCode(data.optimizedCode);
       setImprovements(data.improvements || []);
       setShowOptimized(true);
-      
+
       // Save to history
       saveToHistory(data.optimizedCode, data.improvements || []);
-      
+
       toast.success("Code optimized successfully!");
     } catch (error) {
       console.error('Optimization error:', error);
       toast.error("Failed to optimize code");
     } finally {
       setIsOptimizing(false);
+    }
+  };
+
+  const handleExecute = async () => {
+    if (!optimizedCode) return;
+    setIsExecuting(true);
+    setExecutionResult(null);
+    try {
+      const { data, error } = await supabase.functions.invoke('optimize-code', {
+        body: { code: optimizedCode, language, mode: 'execute' }
+      });
+      if (error) throw error;
+      setExecutionResult(data);
+      if (data.error) toast.error("Execution finished with errors");
+      else toast.success("Execution successful");
+    } catch (error) {
+      toast.error("Failed to execute code");
+      console.error(error);
+      setExecutionResult({ error: error instanceof Error ? error.message : "Unknown error occurred during execution" });
+    } finally {
+      setIsExecuting(false);
     }
   };
 
@@ -255,9 +278,9 @@ export const CodeDemo = () => {
 
   const handleDownload = () => {
     if (!optimizedCode) return;
-    
+
     const element = document.createElement("a");
-    const file = new Blob([optimizedCode], {type: 'text/plain'});
+    const file = new Blob([optimizedCode], { type: 'text/plain' });
     element.href = URL.createObjectURL(file);
     element.download = `optimized_code.${FILE_EXTENSIONS[language]}`;
     document.body.appendChild(element);
@@ -299,9 +322,9 @@ export const CodeDemo = () => {
     const utterance = new SpeechSynthesisUtterance(textToRead);
 
     const voices = window.speechSynthesis.getVoices();
-    const femaleVoice = voices.find(v => 
-      v.name.includes("Google US English") || 
-      v.name.includes("Samantha") || 
+    const femaleVoice = voices.find(v =>
+      v.name.includes("Google US English") ||
+      v.name.includes("Samantha") ||
       v.name.includes("Zira") ||
       v.name.toLowerCase().includes("female")
     );
@@ -338,10 +361,10 @@ export const CodeDemo = () => {
             <h2 className="text-3xl font-bold mb-2">Code Optimization</h2>
             <p className="text-muted-foreground">Refine your code with intelligent analysis.</p>
           </div>
-          
+
           <div className="flex gap-2 animate-fade-in-up delay-100">
-             {/* Optimization Settings Popover */}
-             <Popover>
+            {/* Optimization Settings Popover */}
+            <Popover>
               <PopoverTrigger asChild>
                 <Button variant="outline" className="gap-2 hover:border-primary/50 transition-all">
                   <Settings className="w-4 h-4" />
@@ -358,32 +381,32 @@ export const CodeDemo = () => {
                   </div>
                   <div className="grid gap-2">
                     <div className="flex items-center gap-2">
-                      <Checkbox 
-                        id="performance" 
-                        checked={settings.performance} 
+                      <Checkbox
+                        id="performance"
+                        checked={settings.performance}
                         onCheckedChange={() => handleSettingChange('performance')}
                       />
                       <Label htmlFor="performance">Performance</Label>
                     </div>
                     <div className="flex items-center gap-2">
-                      <Checkbox 
-                        id="readability" 
+                      <Checkbox
+                        id="readability"
                         checked={settings.readability}
                         onCheckedChange={() => handleSettingChange('readability')}
                       />
                       <Label htmlFor="readability">Readability</Label>
                     </div>
                     <div className="flex items-center gap-2">
-                      <Checkbox 
-                        id="security" 
+                      <Checkbox
+                        id="security"
                         checked={settings.security}
                         onCheckedChange={() => handleSettingChange('security')}
                       />
                       <Label htmlFor="security">Security</Label>
                     </div>
                     <div className="flex items-center gap-2">
-                      <Checkbox 
-                        id="comments" 
+                      <Checkbox
+                        id="comments"
                         checked={settings.comments}
                         onCheckedChange={() => handleSettingChange('comments')}
                       />
@@ -417,8 +440,8 @@ export const CodeDemo = () => {
                       </div>
                     ) : (
                       history.map((item) => (
-                        <div 
-                          key={item.id} 
+                        <div
+                          key={item.id}
                           className="p-4 rounded-lg border border-border bg-card hover:bg-accent/50 cursor-pointer transition-colors"
                           onClick={() => restoreHistoryItem(item)}
                         >
@@ -461,7 +484,7 @@ export const CodeDemo = () => {
                   <SelectItem value="html">HTML</SelectItem>
                   <SelectItem value="css">CSS</SelectItem>
                   <SelectItem value="python">Python</SelectItem>
-                  <SelectItem value="cpp">C++</SelectItem>
+                  <SelectItem value="c">C</SelectItem>
                   <SelectItem value="java">Java</SelectItem>
                 </SelectContent>
               </Select>
@@ -471,8 +494,8 @@ export const CodeDemo = () => {
                 Paste your code below
               </div>
               <div className="flex gap-2">
-                <Button 
-                  size="sm" 
+                <Button
+                  size="sm"
                   variant="ghost"
                   onClick={() => copyToClipboard(code, "Original code")}
                   disabled={!code}
@@ -480,8 +503,8 @@ export const CodeDemo = () => {
                 >
                   <Copy className="w-4 h-4" />
                 </Button>
-                <Button 
-                  size="sm" 
+                <Button
+                  size="sm"
                   variant="ghost"
                   onClick={clearCode}
                   disabled={!code}
@@ -489,8 +512,8 @@ export const CodeDemo = () => {
                 >
                   <Trash2 className="w-4 h-4" />
                 </Button>
-                <Button 
-                  size="sm" 
+                <Button
+                  size="sm"
                   onClick={handleOptimize}
                   className="glow hover:scale-105 transition-transform active:scale-95"
                   disabled={isOptimizing || !code}
@@ -510,13 +533,13 @@ export const CodeDemo = () => {
               </div>
             </div>
             <div className="group relative">
-                <div className="absolute -inset-0.5 bg-gradient-to-r from-primary/20 to-blue-600/20 rounded-lg blur opacity-0 group-hover:opacity-100 transition duration-500"></div>
-                <Textarea
+              <div className="absolute -inset-0.5 bg-gradient-to-r from-primary/20 to-blue-600/20 rounded-lg blur opacity-0 group-hover:opacity-100 transition duration-500"></div>
+              <Textarea
                 value={code}
                 onChange={(e) => setCode(e.target.value)}
                 className="relative h-[400px] code-font text-sm bg-card border-border/50 resize-none font-mono focus-visible:ring-primary/50 focus-visible:border-primary/50 transition-all duration-300"
                 placeholder="// Paste your code here..."
-                />
+              />
             </div>
           </div>
 
@@ -525,8 +548,8 @@ export const CodeDemo = () => {
             <div className="flex items-center justify-between mb-2 p-1">
               <div className="flex items-center gap-3">
                 <h3 className="text-lg font-semibold flex items-center gap-2">
-                    <div className="w-2 h-2 rounded-full bg-green-500" />
-                    Optimized Code
+                  <div className="w-2 h-2 rounded-full bg-green-500" />
+                  Optimized Code
                 </h3>
                 {showOptimized && (
                   <div className="flex bg-muted/50 rounded-md p-1 gap-1">
@@ -555,6 +578,15 @@ export const CodeDemo = () => {
                 {showOptimized && (
                   <>
                     <Button
+                      size="sm"
+                      onClick={handleExecute}
+                      disabled={isExecuting}
+                      className="bg-green-600 hover:bg-green-700 text-white gap-2 transition-all shadow-lg shadow-green-900/20"
+                    >
+                      {isExecuting ? <Loader2 className="w-4 h-4 animate-spin" /> : <PlayCircle className="w-4 h-4" />}
+                      Run
+                    </Button>
+                    <Button
                       size="icon"
                       variant="ghost"
                       className={`h-8 w-8 rounded-full hover:bg-primary/10 transition-all ${isSpeaking ? "text-primary animate-pulse bg-primary/10" : ""}`}
@@ -572,8 +604,8 @@ export const CodeDemo = () => {
                     >
                       <Download className="w-4 h-4" />
                     </Button>
-                    <Button 
-                      size="sm" 
+                    <Button
+                      size="sm"
                       variant="outline"
                       onClick={() => copyToClipboard(optimizedCode, "Optimized code")}
                       className="hover:border-primary/50 transition-colors"
@@ -596,12 +628,11 @@ export const CodeDemo = () => {
                     // Diff View
                     <div className="font-mono text-sm w-full leading-relaxed">
                       {diffLines.map((line, idx) => (
-                        <div 
-                          key={idx} 
-                          className={`flex w-full transition-colors hover:bg-white/5 ${
-                            line.type === 'add' ? 'bg-green-500/10 text-green-200 border-l-2 border-green-500 pl-1' : 
+                        <div
+                          key={idx}
+                          className={`flex w-full transition-colors hover:bg-white/5 ${line.type === 'add' ? 'bg-green-500/10 text-green-200 border-l-2 border-green-500 pl-1' :
                             line.type === 'remove' ? 'bg-red-500/10 text-red-200 border-l-2 border-red-500 pl-1 opacity-70' : 'pl-1.5'
-                          }`}
+                            }`}
                         >
                           <span className="w-6 shrink-0 text-muted-foreground select-none text-xs py-0.5 text-right pr-3 opacity-30 font-normal">
                             {line.type === 'add' ? '+' : line.type === 'remove' ? '-' : idx + 1}
@@ -624,8 +655,8 @@ export const CodeDemo = () => {
                     </div>
                   ) : (
                     <div className="flex flex-col items-center gap-4 opacity-50 hover:opacity-80 transition-opacity duration-300">
-                        <Code2 className="w-16 h-16 stroke-1" />
-                        <p>Click "Analyze & Optimize" to see results</p>
+                      <Code2 className="w-16 h-16 stroke-1" />
+                      <p>Click "Analyze & Optimize" to see results</p>
                     </div>
                   )}
                 </div>
@@ -633,6 +664,37 @@ export const CodeDemo = () => {
             </div>
           </div>
         </div>
+
+        {/* Execution Output */}
+        {showOptimized && (executionResult || isExecuting) && (
+          <div className="mt-8 space-y-2 animate-fade-in-up delay-100">
+            <h3 className="text-lg font-semibold flex items-center gap-2">
+              <div className="p-1.5 rounded-lg bg-gray-800 text-gray-400">
+                <Terminal className="w-4 h-4" />
+              </div>
+              Execution Output
+            </h3>
+            <div className="bg-black/90 rounded-lg p-4 font-mono text-sm border border-white/10 shadow-inner min-h-[100px] max-h-[300px] overflow-auto">
+              {isExecuting ? (
+                <div className="flex items-center gap-2 text-gray-400">
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  <span>Compiling and executing...</span>
+                </div>
+              ) : executionResult ? (
+                <>
+                  <div className="text-gray-300 whitespace-pre-wrap">
+                    {executionResult.output || <span className="text-gray-600 italic">Program executed successfully (No output)</span>}
+                  </div>
+                  {executionResult.error && (
+                    <div className="text-red-400 whitespace-pre-wrap border-t border-white/10 mt-2 pt-2">
+                      <span className="font-bold">Error:</span> {executionResult.error}
+                    </div>
+                  )}
+                </>
+              ) : null}
+            </div>
+          </div>
+        )}
 
         {/* Visual List of Improvements */}
         {showOptimized && improvements.length > 0 && (
@@ -644,14 +706,14 @@ export const CodeDemo = () => {
               Improvements Applied
             </h4>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                {improvements.map((improvement, index) => (
-                    <div key={index} className="flex items-start gap-3 p-3 rounded-lg bg-background/50 hover:bg-background transition-colors border border-transparent hover:border-border/50">
-                        <span className="flex-shrink-0 w-5 h-5 rounded-full bg-primary/10 text-primary flex items-center justify-center text-xs font-bold mt-0.5">
-                            {index + 1}
-                        </span>
-                        <span className="text-sm text-muted-foreground leading-relaxed">{improvement}</span>
-                    </div>
-                ))}
+              {improvements.map((improvement, index) => (
+                <div key={index} className="flex items-start gap-3 p-3 rounded-lg bg-background/50 hover:bg-background transition-colors border border-transparent hover:border-border/50">
+                  <span className="flex-shrink-0 w-5 h-5 rounded-full bg-primary/10 text-primary flex items-center justify-center text-xs font-bold mt-0.5">
+                    {index + 1}
+                  </span>
+                  <span className="text-sm text-muted-foreground leading-relaxed">{improvement}</span>
+                </div>
+              ))}
             </div>
           </div>
         )}
