@@ -9,7 +9,7 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger, SheetDescri
 import { ScrollArea } from "@/components/ui/scroll-area";
 import {
   PlayCircle, CheckCircle2, Copy, Trash2, Loader2, Volume2, StopCircle,
-  Download, FileDiff, Code2, Settings, History, Clock, Terminal
+  Download, FileDiff, Code2, Settings, History, Clock, Terminal, Info
 } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
@@ -121,8 +121,6 @@ export const CodeDemo = () => {
   const [isSpeaking, setIsSpeaking] = useState(false);
   const [loadingStep, setLoadingStep] = useState(0);
   const [viewMode, setViewMode] = useState<'code' | 'diff'>('code');
-  const [executionResult, setExecutionResult] = useState<{ output?: string; error?: string } | null>(null);
-  const [isExecuting, setIsExecuting] = useState(false);
 
   // New State for Settings and History
   const [settings, setSettings] = useState<OptimizationSettings>({
@@ -247,27 +245,6 @@ export const CodeDemo = () => {
       toast.error("Failed to optimize code");
     } finally {
       setIsOptimizing(false);
-    }
-  };
-
-  const handleExecute = async () => {
-    if (!optimizedCode) return;
-    setIsExecuting(true);
-    setExecutionResult(null);
-    try {
-      const { data, error } = await supabase.functions.invoke('optimize-code', {
-        body: { code: optimizedCode, language, mode: 'execute' }
-      });
-      if (error) throw error;
-      setExecutionResult(data);
-      if (data.error) toast.error("Execution finished with errors");
-      else toast.success("Execution successful");
-    } catch (error) {
-      toast.error("Failed to execute code");
-      console.error(error);
-      setExecutionResult({ error: error instanceof Error ? error.message : "Unknown error occurred during execution" });
-    } finally {
-      setIsExecuting(false);
     }
   };
 
@@ -577,15 +554,65 @@ export const CodeDemo = () => {
               <div className="flex items-center gap-2">
                 {showOptimized && (
                   <>
-                    <Button
-                      size="sm"
-                      onClick={handleExecute}
-                      disabled={isExecuting}
-                      className="bg-green-600 hover:bg-green-700 text-white gap-2 transition-all shadow-lg shadow-green-900/20"
-                    >
-                      {isExecuting ? <Loader2 className="w-4 h-4 animate-spin" /> : <PlayCircle className="w-4 h-4" />}
-                      Run
-                    </Button>
+                    <Popover>
+                      <PopoverTrigger asChild>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="bg-blue-600/10 border-blue-500/50 text-blue-400 hover:bg-blue-600/20 hover:text-blue-300 gap-2"
+                        >
+                          <Info className="w-4 h-4" />
+                          How to Run
+                        </Button>
+                      </PopoverTrigger>
+                      <PopoverContent className="w-80 bg-gray-900 border-gray-700 text-gray-300">
+                        <div className="space-y-2">
+                          <h4 className="font-medium text-white flex items-center gap-2">
+                            <Terminal className="w-4 h-4" />
+                            Running {language}
+                          </h4>
+                          <div className="text-sm space-y-2">
+                            {language === 'javascript' && (
+                              <p>Run in browser console or Node.js:<br /><code className="bg-black/50 px-1 py-0.5 rounded">node filename.js</code></p>
+                            )}
+                            {language === 'python' && (
+                              <p>Run with Python:<br /><code className="bg-black/50 px-1 py-0.5 rounded">python filename.py</code></p>
+                            )}
+                            {language === 'c' && (
+                              <p>Compile and run:<br /><code className="bg-black/50 px-1 py-0.5 rounded">gcc filename.c -o filename && ./filename</code></p>
+                            )}
+                            {language === 'java' && (
+                              <p>Compile and run:<br /><code className="bg-black/50 px-1 py-0.5 rounded">javac Filename.java && java Filename</code></p>
+                            )}
+                            {(language === 'html' || language === 'css') && (
+                              <p>Open the file in any web browser to view the result.</p>
+                            )}
+                          </div>
+
+                          <div className="pt-2 border-t border-gray-700 mt-2">
+                            <h5 className="font-medium text-white text-xs mb-1.5 opacity-80">Recommended Online Platforms</h5>
+                            <ul className="text-xs space-y-1 text-gray-400">
+                              <li>
+                                <a href="https://replit.com" target="_blank" rel="noopener noreferrer" className="hover:text-blue-400 underline">Replit</a> (All languages)
+                              </li>
+                              {(language === 'javascript' || language === 'html' || language === 'css') && (
+                                <>
+                                  <li><a href="https://codepen.io" target="_blank" rel="noopener noreferrer" className="hover:text-blue-400 underline">CodePen</a> (Frontend)</li>
+                                  <li><a href="https://stackblitz.com" target="_blank" rel="noopener noreferrer" className="hover:text-blue-400 underline">StackBlitz</a> (Frontend/Node)</li>
+                                </>
+                              )}
+                              {(language === 'c' || language === 'java' || language === 'python') && (
+                                <>
+                                  <li><a href="https://www.programiz.com/c-programming/online-compiler/" target="_blank" rel="noopener noreferrer" className="hover:text-blue-400 underline">Programiz</a> (Simple Compiler)</li>
+                                  <li><a href="https://www.onlinegdb.com/" target="_blank" rel="noopener noreferrer" className="hover:text-blue-400 underline">OnlineGDB</a> (Debugging)</li>
+                                </>
+                              )}
+                            </ul>
+                          </div>
+                        </div>
+                      </PopoverContent>
+                    </Popover>
+
                     <Button
                       size="icon"
                       variant="ghost"
@@ -664,37 +691,6 @@ export const CodeDemo = () => {
             </div>
           </div>
         </div>
-
-        {/* Execution Output */}
-        {showOptimized && (executionResult || isExecuting) && (
-          <div className="mt-8 space-y-2 animate-fade-in-up delay-100">
-            <h3 className="text-lg font-semibold flex items-center gap-2">
-              <div className="p-1.5 rounded-lg bg-gray-800 text-gray-400">
-                <Terminal className="w-4 h-4" />
-              </div>
-              Execution Output
-            </h3>
-            <div className="bg-black/90 rounded-lg p-4 font-mono text-sm border border-white/10 shadow-inner min-h-[100px] max-h-[300px] overflow-auto">
-              {isExecuting ? (
-                <div className="flex items-center gap-2 text-gray-400">
-                  <Loader2 className="w-4 h-4 animate-spin" />
-                  <span>Compiling and executing...</span>
-                </div>
-              ) : executionResult ? (
-                <>
-                  <div className="text-gray-300 whitespace-pre-wrap">
-                    {executionResult.output || <span className="text-gray-600 italic">Program executed successfully (No output)</span>}
-                  </div>
-                  {executionResult.error && (
-                    <div className="text-red-400 whitespace-pre-wrap border-t border-white/10 mt-2 pt-2">
-                      <span className="font-bold">Error:</span> {executionResult.error}
-                    </div>
-                  )}
-                </>
-              ) : null}
-            </div>
-          </div>
-        )}
 
         {/* Visual List of Improvements */}
         {showOptimized && improvements.length > 0 && (

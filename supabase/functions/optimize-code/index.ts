@@ -68,35 +68,6 @@ serve(async (req) => {
         contents = [{ role: "user", parts: [{ text: userQuery || "Hello" }] }];
       }
 
-    } else if (mode === 'execute') {
-      systemPrompt = `You are a code execution engine. 
-      Your task is to SIMULATE the execution of the provided code in the "${language}" programming language.
-      
-      CRITICAL: You MUST capture and return ALL standard output (stdout) produced by the code.
-      
-      Rules:
-      1. Analyze the code logic step-by-step.
-      2. If the code uses ANY printing function (printf, cout, console.log, print, System.out.println, etc.), you MUST include the exact output in the 'output' field.
-      3. Do NOT ignore simple print statements. If the code prints "Hello", the output MUST be "Hello".
-      4. IF THE CODE DOES NOT PRODUCE OUTPUT (e.g. it defines a function but doesn't call it):
-         - You MUST simulate calling the Main Function or the Primary Function with reasonable example arguments.
-         - Print the result of that function call in the 'output' field.
-         - Format it as: "Result of [Function Name](args): [Return Value]"
-      5. If there are errors (syntax or runtime), return the STDERR (Standard Error) in the 'error' field.
-      6. Do not provide explanations in the output string, only the raw program output (or your simulated output).
-      7. Return ONLY valid JSON.
-      
-      Output Format:
-      {
-        "output": "The actual program output...",
-        "error": "Any error message (optional)"
-      }`;
-
-      contents = [{
-        role: "user",
-        parts: [{ text: `Code to execute (${language}):\n\n${code}` }]
-      }];
-
     } else {
       // ... (OPTIMIZE MODE logic remains unchanged) ...
       // Construct settings context
