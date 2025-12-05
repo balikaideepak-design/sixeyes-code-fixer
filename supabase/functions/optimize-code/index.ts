@@ -12,7 +12,7 @@ serve(async (req) => {
 
   try {
     const { code, language, mode, settings, messages, userQuery } = await req.json();
-    
+
     const API_KEY = Deno.env.get('LOVABLE_API_KEY');
     if (!API_KEY) {
       throw new Error('API Key not configured');
@@ -25,7 +25,7 @@ serve(async (req) => {
 
     if (mode === 'general-chat') {
       systemPrompt = `You are 'SIX EYES', an expert coding assistant.
-      Your goal is to help users with programming questions for languages like JavaScript, HTML, CSS, Python, C++, and Java.
+      Your goal is to help users with programming questions for languages like JavaScript, HTML, CSS, Python, C, and Java.
       
       - Answer questions concisely and accurately.
       - Provide code examples where helpful.
@@ -51,22 +51,51 @@ serve(async (req) => {
         if (mappedMessages.length > 0) {
           validMessages.push(mappedMessages[0]);
           for (let i = 1; i < mappedMessages.length; i++) {
-            if (mappedMessages[i].role !== mappedMessages[i-1].role) {
+            if (mappedMessages[i].role !== mappedMessages[i - 1].role) {
               validMessages.push(mappedMessages[i]);
             }
           }
         }
-        
+
         contents = validMessages;
       } else {
         // Fallback if no history
         contents = [{ role: "user", parts: [{ text: userQuery || "Hello" }] }];
       }
-      
+
       // Final check: if after filtering we have no messages, add a default one
       if (contents.length === 0) {
-         contents = [{ role: "user", parts: [{ text: userQuery || "Hello" }] }];
+        contents = [{ role: "user", parts: [{ text: userQuery || "Hello" }] }];
       }
+
+    } else if (mode === 'execute') {
+      systemPrompt = `You are a code execution engine. 
+      Your task is to SIMULATE the execution of the provided code in the "${language}" programming language.
+      
+      CRITICAL: You MUST capture and return ALL standard output (stdout) produced by the code.
+      
+      Rules:
+      1. Analyze the code logic step-by-step.
+      2. If the code uses ANY printing function (printf, cout, console.log, print, System.out.println, etc.), you MUST include the exact output in the 'output' field.
+      3. Do NOT ignore simple print statements. If the code prints "Hello", the output MUST be "Hello".
+      4. IF THE CODE DOES NOT PRODUCE OUTPUT (e.g. it defines a function but doesn't call it):
+         - You MUST simulate calling the Main Function or the Primary Function with reasonable example arguments.
+         - Print the result of that function call in the 'output' field.
+         - Format it as: "Result of [Function Name](args): [Return Value]"
+      5. If there are errors (syntax or runtime), return the STDERR (Standard Error) in the 'error' field.
+      6. Do not provide explanations in the output string, only the raw program output (or your simulated output).
+      7. Return ONLY valid JSON.
+      
+      Output Format:
+      {
+        "output": "The actual program output...",
+        "error": "Any error message (optional)"
+      }`;
+
+      contents = [{
+        role: "user",
+        parts: [{ text: `Code to execute (${language}):\n\n${code}` }]
+      }];
 
     } else {
       // ... (OPTIMIZE MODE logic remains unchanged) ...
@@ -78,7 +107,7 @@ serve(async (req) => {
         if (settings.readability) focus.push("Code readability and clean style");
         if (settings.security) focus.push("Security vulnerabilities");
         if (settings.comments) focus.push("Adding detailed comments");
-        
+
         if (focus.length > 0) {
           focusInstructions = `Prioritize the following aspects: ${focus.join(", ")}.`;
         }
@@ -88,7 +117,7 @@ serve(async (req) => {
 
       STEP 1: VALIDATION (CRITICAL)
       The user claims this code is written in "${language}".
-      Analyze the syntax. If the code is clearly NOT "${language}" (e.g., HTML tags in a Java file, Python indentation in C++, CSS rules in JavaScript), you must REJECT it.
+      Analyze the syntax. If the code is clearly NOT "${language}" (e.g., HTML tags in a Java file, Python indentation in C, CSS rules in JavaScript), you must REJECT it.
       
       If rejected, return this JSON:
       {
@@ -110,7 +139,7 @@ serve(async (req) => {
       }
       
       CRITICAL: Return ONLY valid raw JSON. Do not use markdown blocks like \`\`\`json. Do not include any other text.`;
-      
+
       contents = [{
         role: "user",
         parts: [{ text: `Language: ${language}\n\nCode to optimize:\n${code}` }]
@@ -141,7 +170,7 @@ serve(async (req) => {
     }
 
     if (mode !== 'general-chat') {
-        aiResponseText = aiResponseText.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
+      aiResponseText = aiResponseText.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
     }
 
     let result;
